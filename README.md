@@ -132,4 +132,4 @@ Send navigation commands via `POST /command` or the WebSocket channel.
 
 ## Demo
 
-[Watch demo video]()
+[Watch demo video](https://github.com/user-attachments/assets/831fe216-bac0-4b0e-9d3f-1d16fbfc5e1c)
