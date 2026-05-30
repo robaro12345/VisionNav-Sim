@@ -1,0 +1,579 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+  <world name="slam_nav_world">
+
+    <!-- ═══════════════════════════════════════════
+         PLUGINS
+    ═══════════════════════════════════════════ -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <!-- ═══════════════════════════════════════════
+         LIGHTING
+    ═══════════════════════════════════════════ -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 15 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+    </light>
+
+    <light type="point" name="ceiling_light_1">
+      <pose>0 0 4 0 0 0</pose>
+      <diffuse>0.8 0.8 1.0 1</diffuse>
+      <specular>0.1 0.1 0.1 1</specular>
+      <attenuation>
+        <range>20</range>
+        <constant>0.5</constant>
+        <linear>0.05</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+
+    <light type="point" name="ceiling_light_2">
+      <pose>8 8 4 0 0 0</pose>
+      <diffuse>0.8 0.8 1.0 1</diffuse>
+      <specular>0.1 0.1 0.1 1</specular>
+      <attenuation>
+        <range>20</range>
+        <constant>0.5</constant>
+        <linear>0.05</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+
+    <light type="point" name="ceiling_light_3">
+      <pose>-8 -8 4 0 0 0</pose>
+      <diffuse>0.8 0.8 1.0 1</diffuse>
+      <specular>0.1 0.1 0.1 1</specular>
+      <attenuation>
+        <range>20</range>
+        <constant>0.5</constant>
+        <linear>0.05</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+
+    <!-- ═══════════════════════════════════════════
+         GROUND PLANE
+    ═══════════════════════════════════════════ -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>200 200</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>200 200</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.4 0.4 0.4 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ═══════════════════════════════════════════
+         OUTER BOUNDARY WALLS  (20×20m arena)
+         Wall thickness: 0.2m, height: 2.5m
+    ═══════════════════════════════════════════ -->
+
+    <!-- North outer wall -->
+    <model name="outer_wall_north">
+      <static>true</static>
+      <pose>0 10 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>20.2 0.2 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>20.2 0.2 2.5</size></box></geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- South outer wall -->
+    <model name="outer_wall_south">
+      <static>true</static>
+      <pose>0 -10 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>20.2 0.2 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>20.2 0.2 2.5</size></box></geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- East outer wall -->
+    <model name="outer_wall_east">
+      <static>true</static>
+      <pose>10 0 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 20 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 20 2.5</size></box></geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- West outer wall -->
+    <model name="outer_wall_west">
+      <static>true</static>
+      <pose>-10 0 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 20 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 20 2.5</size></box></geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ═══════════════════════════════════════════
+         INTERIOR LAYOUT
+         Divides the space into:
+           - Central open area  (~8×8m, origin)
+           - North corridor
+           - East room
+           - West room
+           - South dead-end corridor
+    ═══════════════════════════════════════════ -->
+
+    <!-- ── North corridor walls (Y: 3 to 10, width: 2m) ── -->
+    <model name="corridor_north_wall_west">
+      <static>true</static>
+      <!-- Left wall of north corridor, gap at Y=3 is the doorway -->
+      <pose>-1.1 6.5 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 7 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 7 2.5</size></box></geometry>
+          <material><ambient>0.65 0.65 0.7 1</ambient><diffuse>0.75 0.75 0.8 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="corridor_north_wall_east">
+      <static>true</static>
+      <pose>1.1 6.5 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 7 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 7 2.5</size></box></geometry>
+          <material><ambient>0.65 0.65 0.7 1</ambient><diffuse>0.75 0.75 0.8 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── East room (X: 3 to 10, Y: -4 to 4) ── -->
+    <!-- South wall of east room -->
+    <model name="east_room_wall_south">
+      <static>true</static>
+      <pose>6.5 -4 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>7 0.2 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>7 0.2 2.5</size></box></geometry>
+          <material><ambient>0.6 0.65 0.6 1</ambient><diffuse>0.7 0.75 0.7 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- North wall of east room (with 1.2m doorway gap at Y=2 to 3.2) -->
+    <model name="east_room_wall_north_a">
+      <static>true</static>
+      <pose>6.5 4 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>4 0.2 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>4 0.2 2.5</size></box></geometry>
+          <material><ambient>0.6 0.65 0.6 1</ambient><diffuse>0.7 0.75 0.7 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="east_room_wall_north_b">
+      <static>true</static>
+      <pose>9.4 4 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>1.0 0.2 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>1.0 0.2 2.5</size></box></geometry>
+          <material><ambient>0.6 0.65 0.6 1</ambient><diffuse>0.7 0.75 0.7 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- West wall of east room (doorway gap at X=3, Y=-0.6 to 0.6) -->
+    <model name="east_room_wall_west_a">
+      <static>true</static>
+      <pose>3 -2.6 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 2.8 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 2.8 2.5</size></box></geometry>
+          <material><ambient>0.6 0.65 0.6 1</ambient><diffuse>0.7 0.75 0.7 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="east_room_wall_west_b">
+      <static>true</static>
+      <pose>3 2.8 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 2.4 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 2.4 2.5</size></box></geometry>
+          <material><ambient>0.6 0.65 0.6 1</ambient><diffuse>0.7 0.75 0.7 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── West room (X: -10 to -3, Y: -5 to 3) ── -->
+    <model name="west_room_wall_north">
+      <static>true</static>
+      <pose>-6.5 3 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>7 0.2 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>7 0.2 2.5</size></box></geometry>
+          <material><ambient>0.65 0.6 0.6 1</ambient><diffuse>0.75 0.7 0.7 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="west_room_wall_south">
+      <static>true</static>
+      <pose>-6.5 -5 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>7 0.2 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>7 0.2 2.5</size></box></geometry>
+          <material><ambient>0.65 0.6 0.6 1</ambient><diffuse>0.75 0.7 0.7 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- East wall of west room — doorway gap at Y=0 to 1.2 -->
+    <model name="west_room_wall_east_a">
+      <static>true</static>
+      <pose>-3 -2.5 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 5 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 5 2.5</size></box></geometry>
+          <material><ambient>0.65 0.6 0.6 1</ambient><diffuse>0.75 0.7 0.7 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="west_room_wall_east_b">
+      <static>true</static>
+      <pose>-3 2.1 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 1.8 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 1.8 2.5</size></box></geometry>
+          <material><ambient>0.65 0.6 0.6 1</ambient><diffuse>0.75 0.7 0.7 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── South dead-end corridor (Y: -10 to -3, X: -1.5 to 1.5) ── -->
+    <model name="corridor_south_wall_west">
+      <static>true</static>
+      <pose>-1.5 -6.5 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 7 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 7 2.5</size></box></geometry>
+          <material><ambient>0.65 0.65 0.7 1</ambient><diffuse>0.75 0.75 0.8 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="corridor_south_wall_east">
+      <static>true</static>
+      <pose>1.5 -6.5 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 7 2.5</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 7 2.5</size></box></geometry>
+          <material><ambient>0.65 0.65 0.7 1</ambient><diffuse>0.75 0.75 0.8 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ═══════════════════════════════════════════
+         OBSTACLES — Central open area
+         Mix of boxes and cylinders for nav testing
+    ═══════════════════════════════════════════ -->
+
+    <!-- Box obstacle cluster A -->
+    <model name="box_obs_1">
+      <static>true</static>
+      <pose>1.5 1.5 0.3 0 0 0.3</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.6 0.6 0.6</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.6 0.6 0.6</size></box></geometry>
+          <material><ambient>0.8 0.4 0.2 1</ambient><diffuse>0.9 0.5 0.3 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="box_obs_2">
+      <static>true</static>
+      <pose>2.2 1.0 0.4 0 0 0.6</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.5 0.8 0.8</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.5 0.8 0.8</size></box></geometry>
+          <material><ambient>0.8 0.4 0.2 1</ambient><diffuse>0.9 0.5 0.3 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Box obstacle cluster B (south-west quadrant) -->
+    <model name="box_obs_3">
+      <static>true</static>
+      <pose>-1.8 -1.2 0.35 0 0 1.1</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.7 0.4 0.7</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.7 0.4 0.7</size></box></geometry>
+          <material><ambient>0.2 0.5 0.8 1</ambient><diffuse>0.3 0.6 0.9 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="box_obs_4">
+      <static>true</static>
+      <pose>-2.5 -0.5 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.5 0.5 0.5</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.5 0.5 0.5</size></box></geometry>
+          <material><ambient>0.2 0.5 0.8 1</ambient><diffuse>0.3 0.6 0.9 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Cylinder obstacles (pillar-like, good for LiDAR feature extraction) -->
+    <model name="cyl_obs_1">
+      <static>true</static>
+      <pose>0.5 -2.0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><cylinder><radius>0.2</radius><length>1.0</length></cylinder></geometry></collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.2</radius><length>1.0</length></cylinder></geometry>
+          <material><ambient>0.3 0.7 0.3 1</ambient><diffuse>0.4 0.8 0.4 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="cyl_obs_2">
+      <static>true</static>
+      <pose>-0.8 2.2 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><cylinder><radius>0.25</radius><length>1.0</length></cylinder></geometry></collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.25</radius><length>1.0</length></cylinder></geometry>
+          <material><ambient>0.3 0.7 0.3 1</ambient><diffuse>0.4 0.8 0.4 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="cyl_obs_3">
+      <static>true</static>
+      <pose>2.0 -1.5 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><cylinder><radius>0.15</radius><length>1.0</length></cylinder></geometry></collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.15</radius><length>1.0</length></cylinder></geometry>
+          <material><ambient>0.3 0.7 0.3 1</ambient><diffuse>0.4 0.8 0.4 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ═══════════════════════════════════════════
+         OBSTACLES — East room
+    ═══════════════════════════════════════════ -->
+    <model name="east_room_box_1">
+      <static>true</static>
+      <pose>5.5 0 0.3 0 0 0.5</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.0 0.4 0.6</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>1.0 0.4 0.6</size></box></geometry>
+          <material><ambient>0.7 0.6 0.2 1</ambient><diffuse>0.85 0.75 0.3 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="east_room_box_2">
+      <static>true</static>
+      <pose>7.0 -2.5 0.4 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.6 0.6 0.8</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.6 0.6 0.8</size></box></geometry>
+          <material><ambient>0.7 0.6 0.2 1</ambient><diffuse>0.85 0.75 0.3 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="east_room_cyl_1">
+      <static>true</static>
+      <pose>8.5 1.5 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><cylinder><radius>0.2</radius><length>1.0</length></cylinder></geometry></collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.2</radius><length>1.0</length></cylinder></geometry>
+          <material><ambient>0.7 0.3 0.5 1</ambient><diffuse>0.8 0.4 0.6 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ═══════════════════════════════════════════
+         OBSTACLES — West room
+    ═══════════════════════════════════════════ -->
+    <model name="west_room_box_1">
+      <static>true</static>
+      <pose>-6.0 -1.0 0.5 0 0 0.8</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.8 0.8 1.0</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.8 0.8 1.0</size></box></geometry>
+          <material><ambient>0.5 0.3 0.7 1</ambient><diffuse>0.6 0.4 0.85 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="west_room_box_2">
+      <static>true</static>
+      <pose>-8.0 1.5 0.3 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.2 0.4 0.6</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>1.2 0.4 0.6</size></box></geometry>
+          <material><ambient>0.5 0.3 0.7 1</ambient><diffuse>0.6 0.4 0.85 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ═══════════════════════════════════════════
+         OBSTACLES — Corridors
+    ═══════════════════════════════════════════ -->
+    <!-- Narrow box in north corridor (forces careful path planning) -->
+    <model name="corridor_north_box">
+      <static>true</static>
+      <pose>0 5.5 0.3 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.8 0.4 0.6</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.8 0.4 0.6</size></box></geometry>
+          <material><ambient>0.9 0.4 0.4 1</ambient><diffuse>1.0 0.5 0.5 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Object in south corridor -->
+    <model name="corridor_south_box">
+      <static>true</static>
+      <pose>0 -7.5 0.3 0 0 0.4</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.5 0.5 0.6</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.5 0.5 0.6</size></box></geometry>
+          <material><ambient>0.9 0.4 0.4 1</ambient><diffuse>1.0 0.5 0.5 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ═══════════════════════════════════════════
+         SPAWN POINT MARKER (origin, robot starts here)
+         Thin flat disk so it's visible from above
+    ═══════════════════════════════════════════ -->
+    <model name="spawn_marker">
+      <static>true</static>
+      <pose>0 0 0.01 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><cylinder><radius>0.3</radius><length>0.02</length></cylinder></geometry>
+          <material><ambient>0.1 0.9 0.1 1</ambient><diffuse>0.2 1.0 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

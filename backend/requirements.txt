@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+websockets
+pydantic
+opencv-python
+torch
+torchvision
+Pillow
+numpy
+langgraph
+langchain-ollama
+ultralytics

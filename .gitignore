@@ -1,0 +1,94 @@
+# ROS 2 build artifacts
+build/
+install/
+log/
+
+# Colcon
+.colcon/
+.colcon_install_layout
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment files
+.env
+.env.*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Machine Learning / Model files
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# ROS bag files
+*.db3
+*.mcap
+
+# Generated message/service files
+msg_gen/
+srv_gen/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Testing
+.pytest_cache/
+coverage.xml
+htmlcov/
+.coverage
+
+# Misc
+*.tmp
+*.bak
+*.orig
+
+# Large datasets
+datasets/
+data/
+images/
+videos/
+recordings/
+
+# Trained models
+models/
+weights/
+checkpoints/
+
+# TensorBoard
+runs/
+tensorboard_logs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ROS map files
+*.pgm
+*.yaml
+*.docx
+
+demo
