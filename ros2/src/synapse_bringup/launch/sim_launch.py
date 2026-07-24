@@ -1,4 +1,5 @@
 import os
+import yaml
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -144,21 +145,41 @@ def generate_launch_description():
     #
     # Nav2 + SLAM
     #
+    # Locate RobotProject root by traversing up from the install directory
+    install_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../../..'))
+    config_path = os.path.join(install_dir, 'config', 'paths.yaml')
+    use_slam = 'True'
+    map_arg = ''
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+        map_dir = config.get("map_dir", "/home/omkar/Downloads/RobotProject/map")
+        map_yaml_path = os.path.join(map_dir, "map.yaml")
+        if os.path.exists(map_yaml_path):
+            use_slam = 'False'
+            map_arg = map_yaml_path
+    except Exception as e:
+        print(f"Could not load paths.yaml: {e}")
+
+    nav2_args = {
+        'slam': use_slam,
+        'use_localization': 'True',
+        'use_sim_time': 'true',
+        'autostart': 'true',
+        'use_composition': 'False',
+        'use_respawn': 'False',
+        'params_file': nav2_params_file,
+    }
+    if map_arg:
+        nav2_args['map'] = map_arg
+
     ld.add_action(
         TimerAction(
             period=20.0,
             actions=[
                 IncludeLaunchDescription(
                     PythonLaunchDescriptionSource(nav2_launch),
-                    launch_arguments={
-                        'slam': 'True',
-                        'use_localization': 'True',
-                        'use_sim_time': 'true',
-                        'autostart': 'true',
-                        'use_composition': 'False',
-                        'use_respawn': 'False',
-                        'params_file': nav2_params_file,
-                    }.items(),
+                    launch_arguments=nav2_args.items(),
                 )
             ],
         )

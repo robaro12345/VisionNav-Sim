@@ -26,7 +26,7 @@ class OllamaPlanner:
 
     def __init__(self) -> None:
         self.endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434").rstrip("/")
-        self.model_name = os.getenv("OLLAMA_MODEL", "gemma4:e4b")
+        self.model_name = os.getenv("OLLAMA_MODEL", "gemma4:12b")
 
     def build_context(
         self,
@@ -54,13 +54,16 @@ class OllamaPlanner:
             "navigation_status": context.navigation_status.status_text,
             "current_task": context.current_task,
             "scene_description": context.scene_summary,
-            "recent_commands": memory.recent_commands
+            "recent_commands": memory.recent_commands,
+            "semantic_objects": [obj.model_dump() for obj in context.semantic_objects]
         }
 
     def build_prompt(self, command: str, context_block: dict[str, Any]) -> str:
         """Construct the prompt and system instructions for the local Gemma model."""
         action_metadata = {
+            "explore_environment": "Autonomously explore unknown areas of the map while cataloging new objects. Parameters: {}",
             "navigate_to_pose": "Go to a coordinate relative to the robot. +x is forward, +y is left. Parameters: {'x': float, 'y': float, 'yaw': float, 'frame_id': 'base_link'}",
+            "navigate_to_object": "Navigate to a known object from the semantic map. Parameters: {'object_name': 'String name of the object'}",
             "describe_scene": "Capture image and summarize surroundings. Parameters: {}",
             "return_home": "Return to the configured home position. Parameters: {}",
             "stop_navigation": "Immediately stop navigation. Parameters: {}",
@@ -79,6 +82,7 @@ class OllamaPlanner:
             "You are a high-level robot executive with vision capabilities. Translate the user's natural language command "
             "into a structured action plan. Analyze the current pose, active navigation status, "
             "recent commands, and the provided camera image to generate reasoning and a sequence of steps.\n\n"
+            "You have access to a static semantic map of known objects in the context. If the user asks to go to an object, you MUST use the `navigate_to_object` action and pass the `object_name` parameter.\n\n"
             "CONSTRAINTS:\n"
             "- You must ONLY output a valid JSON object matching the JSON schema below.\n"
             "- Do NOT include any markdown code blocks, backticks, or extra explanation outside the JSON.\n"

@@ -30,6 +30,7 @@ class ContextNode(Node):
         self.store = ContextStore()
         self.bridge = CvBridge()
         self.latest_scan_msg: LaserScan | None = None
+        self.latest_map_msg: OccupancyGrid | None = None
 
         # Existing odom topic from the Gazebo DiffDrive plugin.
         self._odom_subscription = self.create_subscription(
@@ -137,8 +138,8 @@ class ContextNode(Node):
         try:
             cv_image = self.bridge.imgmsg_to_cv2(message, desired_encoding='bgr8')
             # Use atomic write to prevent frontend from reading partial file
-            final_path = "/home/omkar/RobotProject/backend/app/api/camera_frame.jpg"
-            temp_path = "/home/omkar/RobotProject/backend/app/api/camera_frame_tmp.jpg"
+            final_path = "/home/omkar/Downloads/RobotProject/backend/app/api/camera_frame.jpg"
+            temp_path = "/home/omkar/Downloads/RobotProject/backend/app/api/camera_frame_tmp.jpg"
             import os
             cv2.imwrite(temp_path, cv_image)
             os.replace(temp_path, final_path)
@@ -147,6 +148,7 @@ class ContextNode(Node):
 
     def _handle_map(self, message: OccupancyGrid) -> None:
         """Track map progress from the already published /map occupancy grid."""
+        self.latest_map_msg = message
 
         occupied = sum(1 for cell in message.data if cell > 50)
         known = sum(1 for cell in message.data if cell >= 0)

@@ -27,11 +27,200 @@ interface ReasoningBreakdown {
 interface TaskStatus {
   active_task: string;
   task_history: any[];
+  exploration_status?: string;
 }
 
 interface NavHistory {
   navigation_history: any[];
 }
+
+// --- Sub-components (Moved OUTSIDE App to prevent remounting) ---
+
+const CameraFeedPanel = () => {
+  const [timestamp, setTimestamp] = useState(Date.now());
+  
+  useEffect(() => {
+    const interval = setInterval(() => setTimestamp(Date.now()), 500); // 2FPS update rate
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="glass-panel p-6 flex flex-col gap-4">
+      <h2 className="text-xl font-semibold text-fuchsia-400">Live Camera Feed</h2>
+      <div className="rounded-xl overflow-hidden border border-slate-700/50 bg-black aspect-video flex items-center justify-center relative">
+        <img 
+          src={`${API_BASE}/camera/frame.jpg?t=${timestamp}`} 
+          alt="Live Camera Feed"
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            const nextSib = e.currentTarget.nextElementSibling as HTMLElement;
+            if (nextSib) nextSib.classList.remove('hidden');
+          }}
+          onLoad={(e) => {
+            e.currentTarget.style.display = 'block';
+            const nextSib = e.currentTarget.nextElementSibling as HTMLElement;
+            if (nextSib) nextSib.classList.add('hidden');
+          }}
+        />
+        <div className="hidden absolute text-slate-500 font-mono text-sm flex flex-col items-center gap-2">
+          <svg className="w-8 h-8 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3" />
+          </svg>
+          NO SIGNAL
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RobotStatePanel = ({ context, taskState }: { context: RobotContext | null, taskState: TaskStatus | null }) => {
+  if (!context) return <div className="glass-panel p-6">Loading state...</div>;
+  const { robot_pose, navigation_status } = context;
+  
+  return (
+    <div className="glass-panel p-6 flex flex-col gap-4">
+      <h2 className="text-xl font-semibold text-sky-400">System Metrics</h2>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-slate-800/50 p-4 rounded-xl">
+          <div className="text-sm text-slate-400">Battery</div>
+          <div className="text-2xl font-mono text-emerald-400">{robot_pose.battery}%</div>
+        </div>
+        <div className="bg-slate-800/50 p-4 rounded-xl">
+          <div className="text-sm text-slate-400">Status</div>
+          <div className="text-xl font-medium text-sky-300 capitalize">{navigation_status.state}</div>
+        </div>
+        <div className="bg-slate-800/50 p-4 rounded-xl">
+          <div className="text-sm text-slate-400">Speed (m/s)</div>
+          <div className="text-xl font-mono text-slate-200">{robot_pose.velocity_linear.toFixed(2)}</div>
+        </div>
+        <div className="bg-slate-800/50 p-4 rounded-xl">
+          <div className="text-sm text-slate-400">Exploration</div>
+          <div className={`text-xl font-medium capitalize ${taskState?.exploration_status === 'active' ? 'text-amber-400' : taskState?.exploration_status === 'completed' ? 'text-emerald-400' : 'text-slate-400'}`}>
+            {taskState?.exploration_status || 'Idle'}
+          </div>
+        </div>
+      </div>
+      
+      <div className="mt-2 text-sm text-slate-400">
+        Position: X:{robot_pose.position.x.toFixed(2)} Y:{robot_pose.position.y.toFixed(2)} | Yaw: {robot_pose.orientation.yaw.toFixed(2)} rad
+      </div>
+    </div>
+  );
+};
+
+const ReasoningPanel = ({ reasoning }: { reasoning: ReasoningBreakdown | null }) => {
+  if (!reasoning) return (
+    <div className="glass-panel p-6 flex flex-col gap-4 h-full">
+      <h2 className="text-xl font-semibold text-fuchsia-400">AI Reasoning Engine</h2>
+      <div className="text-slate-500 italic">Waiting for command...</div>
+    </div>
+  );
+  
+  return (
+    <div className="glass-panel p-6 flex flex-col gap-4 h-full">
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-semibold text-fuchsia-400">AI Reasoning Engine</h2>
+        <span className="px-3 py-1 bg-fuchsia-500/20 text-fuchsia-300 rounded-full text-xs font-mono">
+          CONFIDENCE: {(reasoning.confidence * 100).toFixed(0)}%
+        </span>
+      </div>
+      
+      <div className="flex flex-col gap-3 flex-1 overflow-y-auto">
+        <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+          <span className="block text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">User Intent</span>
+          <span className="text-slate-200">{reasoning.user_intent}</span>
+        </div>
+        <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+          <span className="block text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Scene Analysis</span>
+          <span className="text-slate-200">{reasoning.scene_analysis}</span>
+        </div>
+        <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
+          <span className="block text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Decision Process</span>
+          <span className="text-slate-200">{reasoning.decision_process}</span>
+        </div>
+        <div className="bg-amber-900/20 p-4 rounded-xl border border-amber-700/30">
+          <span className="block text-xs font-semibold text-amber-500 mb-1 uppercase tracking-wider">Safety Considerations</span>
+          <span className="text-amber-200">{reasoning.safety_considerations}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const NavigationPanel = ({ navHistory }: { navHistory: NavHistory | null }) => {
+  return (
+    <div className="glass-panel p-6 flex flex-col gap-4">
+      <h2 className="text-xl font-semibold text-indigo-400">Navigation History</h2>
+      <div className="flex flex-col gap-2 overflow-y-auto max-h-64 pr-2">
+        {(!navHistory?.navigation_history || navHistory.navigation_history.length === 0) ? (
+          <div className="text-slate-500 italic">No history yet.</div>
+        ) : (
+          [...navHistory.navigation_history].reverse().map((entry, idx) => (
+            <div key={idx} className="bg-slate-800/30 p-3 rounded-lg border border-slate-700/30 flex justify-between items-center">
+              <div>
+                <div className="text-sm font-medium text-slate-200">{entry.target}</div>
+                <div className="text-xs text-slate-400 mt-1">{new Date(entry.timestamp).toLocaleTimeString()}</div>
+              </div>
+              <div className={`text-xs px-2 py-1 rounded-md ${entry.result.includes('success') ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                {entry.result}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ManualTeleopPanel = ({ handleManual, handleStop }: { handleManual: (linear: number, angular: number) => void, handleStop: () => void }) => {
+  return (
+    <div className="glass-panel p-6 flex flex-col items-center justify-center gap-6">
+      <h2 className="text-xl font-semibold text-slate-300 self-start">Manual Override</h2>
+      
+      <div className="grid grid-cols-3 gap-2 w-48">
+        <div />
+        <button 
+          onMouseDown={() => handleManual(0.5, 0.0)} 
+          onMouseUp={() => handleManual(0.0, 0.0)}
+          onMouseLeave={() => handleManual(0.0, 0.0)}
+          className="w-14 h-14 bg-slate-800 hover:bg-slate-700 active:bg-sky-600 rounded-xl flex items-center justify-center transition-colors border border-slate-700 cursor-pointer shadow-lg">
+          W
+        </button>
+        <div />
+        <button 
+          onMouseDown={() => handleManual(0.0, 1.0)} 
+          onMouseUp={() => handleManual(0.0, 0.0)}
+          onMouseLeave={() => handleManual(0.0, 0.0)}
+          className="w-14 h-14 bg-slate-800 hover:bg-slate-700 active:bg-sky-600 rounded-xl flex items-center justify-center transition-colors border border-slate-700 cursor-pointer shadow-lg">
+          A
+        </button>
+        <button 
+          onMouseDown={() => handleManual(-0.5, 0.0)} 
+          onMouseUp={() => handleManual(0.0, 0.0)}
+          onMouseLeave={() => handleManual(0.0, 0.0)}
+          className="w-14 h-14 bg-slate-800 hover:bg-slate-700 active:bg-sky-600 rounded-xl flex items-center justify-center transition-colors border border-slate-700 cursor-pointer shadow-lg">
+          S
+        </button>
+        <button 
+          onMouseDown={() => handleManual(0.0, -1.0)} 
+          onMouseUp={() => handleManual(0.0, 0.0)}
+          onMouseLeave={() => handleManual(0.0, 0.0)}
+          className="w-14 h-14 bg-slate-800 hover:bg-slate-700 active:bg-sky-600 rounded-xl flex items-center justify-center transition-colors border border-slate-700 cursor-pointer shadow-lg">
+          D
+        </button>
+      </div>
+
+      <button 
+        onClick={handleStop}
+        className="w-full py-3 mt-2 bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/50 text-rose-400 hover:text-rose-300 rounded-xl font-bold tracking-widest transition-all cursor-pointer shadow-[0_0_15px_rgba(225,29,72,0.2)] hover:shadow-[0_0_25px_rgba(225,29,72,0.4)]">
+        EMERGENCY STOP
+      </button>
+    </div>
+  );
+};
+
 
 // --- Main App Component ---
 function App() {
@@ -103,198 +292,11 @@ function App() {
   };
 
   const handleStop = async () => {
-    // E-Stop routes through command to ensure safe pipeline cancellation or via a dedicated endpoint. 
-    // Since we don't have a dedicated emergency endpoint, we use the command `stop navigation`.
     await fetch(`${API_BASE}/command`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId, command: "Stop navigation immediately" })
     });
-  };
-
-  // Sub-components
-  const CameraFeedPanel = () => {
-    // Add cache buster query string to automatically reload the image periodically
-    const [timestamp, setTimestamp] = useState(Date.now());
-    
-    useEffect(() => {
-      const interval = setInterval(() => setTimestamp(Date.now()), 500); // 2FPS update rate
-      return () => clearInterval(interval);
-    }, []);
-
-    return (
-      <div className="glass-panel p-6 flex flex-col gap-4">
-        <h2 className="text-xl font-semibold text-fuchsia-400">Live Camera Feed</h2>
-        <div className="rounded-xl overflow-hidden border border-slate-700/50 bg-black aspect-video flex items-center justify-center relative">
-          <img 
-            src={`${API_BASE}/camera/frame.jpg?t=${timestamp}`} 
-            alt="Live Camera Feed"
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-              const nextSib = e.currentTarget.nextElementSibling as HTMLElement;
-              if (nextSib) nextSib.classList.remove('hidden');
-            }}
-            onLoad={(e) => {
-              e.currentTarget.style.display = 'block';
-              const nextSib = e.currentTarget.nextElementSibling as HTMLElement;
-              if (nextSib) nextSib.classList.add('hidden');
-            }}
-          />
-          <div className="hidden absolute text-slate-500 font-mono text-sm flex flex-col items-center gap-2">
-            <svg className="w-8 h-8 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3" />
-            </svg>
-            NO SIGNAL
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const RobotStatePanel = () => {
-    if (!context) return <div className="glass-panel p-6">Loading state...</div>;
-    const { robot_pose, navigation_status } = context;
-    
-    return (
-      <div className="glass-panel p-6 flex flex-col gap-4">
-        <h2 className="text-xl font-semibold text-sky-400">System Metrics</h2>
-        
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-slate-800/50 p-4 rounded-xl">
-            <div className="text-sm text-slate-400">Battery</div>
-            <div className="text-2xl font-mono text-emerald-400">{robot_pose.battery}%</div>
-          </div>
-          <div className="bg-slate-800/50 p-4 rounded-xl">
-            <div className="text-sm text-slate-400">Status</div>
-            <div className="text-xl font-medium text-sky-300 capitalize">{navigation_status.state}</div>
-          </div>
-          <div className="bg-slate-800/50 p-4 rounded-xl">
-            <div className="text-sm text-slate-400">Speed (m/s)</div>
-            <div className="text-xl font-mono text-slate-200">{robot_pose.velocity_linear.toFixed(2)}</div>
-          </div>
-          <div className="bg-slate-800/50 p-4 rounded-xl">
-            <div className="text-sm text-slate-400">Yaw (rad)</div>
-            <div className="text-xl font-mono text-slate-200">{robot_pose.orientation.yaw.toFixed(2)}</div>
-          </div>
-        </div>
-        
-        <div className="mt-2 text-sm text-slate-400">
-          Position: X:{robot_pose.position.x.toFixed(2)} Y:{robot_pose.position.y.toFixed(2)}
-        </div>
-      </div>
-    );
-  };
-
-  const ReasoningPanel = () => {
-    if (!reasoning) return (
-      <div className="glass-panel p-6 flex flex-col gap-4 h-full">
-        <h2 className="text-xl font-semibold text-fuchsia-400">AI Reasoning Engine</h2>
-        <div className="text-slate-500 italic">Waiting for command...</div>
-      </div>
-    );
-    
-    return (
-      <div className="glass-panel p-6 flex flex-col gap-4 h-full">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-fuchsia-400">AI Reasoning Engine</h2>
-          <span className="px-3 py-1 bg-fuchsia-500/20 text-fuchsia-300 rounded-full text-xs font-mono">
-            CONFIDENCE: {(reasoning.confidence * 100).toFixed(0)}%
-          </span>
-        </div>
-        
-        <div className="flex flex-col gap-3 flex-1 overflow-y-auto">
-          <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-            <span className="block text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">User Intent</span>
-            <span className="text-slate-200">{reasoning.user_intent}</span>
-          </div>
-          <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-            <span className="block text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Scene Analysis</span>
-            <span className="text-slate-200">{reasoning.scene_analysis}</span>
-          </div>
-          <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50">
-            <span className="block text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Decision Process</span>
-            <span className="text-slate-200">{reasoning.decision_process}</span>
-          </div>
-          <div className="bg-amber-900/20 p-4 rounded-xl border border-amber-700/30">
-            <span className="block text-xs font-semibold text-amber-500 mb-1 uppercase tracking-wider">Safety Considerations</span>
-            <span className="text-amber-200">{reasoning.safety_considerations}</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const NavigationPanel = () => {
-    return (
-      <div className="glass-panel p-6 flex flex-col gap-4">
-        <h2 className="text-xl font-semibold text-indigo-400">Navigation History</h2>
-        <div className="flex flex-col gap-2 overflow-y-auto max-h-64 pr-2">
-          {(!navHistory?.navigation_history || navHistory.navigation_history.length === 0) ? (
-            <div className="text-slate-500 italic">No history yet.</div>
-          ) : (
-            [...navHistory.navigation_history].reverse().map((entry, idx) => (
-              <div key={idx} className="bg-slate-800/30 p-3 rounded-lg border border-slate-700/30 flex justify-between items-center">
-                <div>
-                  <div className="text-sm font-medium text-slate-200">{entry.target}</div>
-                  <div className="text-xs text-slate-400 mt-1">{new Date(entry.timestamp).toLocaleTimeString()}</div>
-                </div>
-                <div className={`text-xs px-2 py-1 rounded-md ${entry.result.includes('success') ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                  {entry.result}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const ManualTeleopPanel = () => {
-    return (
-      <div className="glass-panel p-6 flex flex-col items-center justify-center gap-6">
-        <h2 className="text-xl font-semibold text-slate-300 self-start">Manual Override</h2>
-        
-        <div className="grid grid-cols-3 gap-2 w-48">
-          <div />
-          <button 
-            onMouseDown={() => handleManual(0.5, 0.0)} 
-            onMouseUp={() => handleManual(0.0, 0.0)}
-            onMouseLeave={() => handleManual(0.0, 0.0)}
-            className="w-14 h-14 bg-slate-800 hover:bg-slate-700 active:bg-sky-600 rounded-xl flex items-center justify-center transition-colors border border-slate-700 cursor-pointer shadow-lg">
-            W
-          </button>
-          <div />
-          <button 
-            onMouseDown={() => handleManual(0.0, 1.0)} 
-            onMouseUp={() => handleManual(0.0, 0.0)}
-            onMouseLeave={() => handleManual(0.0, 0.0)}
-            className="w-14 h-14 bg-slate-800 hover:bg-slate-700 active:bg-sky-600 rounded-xl flex items-center justify-center transition-colors border border-slate-700 cursor-pointer shadow-lg">
-            A
-          </button>
-          <button 
-            onMouseDown={() => handleManual(-0.5, 0.0)} 
-            onMouseUp={() => handleManual(0.0, 0.0)}
-            onMouseLeave={() => handleManual(0.0, 0.0)}
-            className="w-14 h-14 bg-slate-800 hover:bg-slate-700 active:bg-sky-600 rounded-xl flex items-center justify-center transition-colors border border-slate-700 cursor-pointer shadow-lg">
-            S
-          </button>
-          <button 
-            onMouseDown={() => handleManual(0.0, -1.0)} 
-            onMouseUp={() => handleManual(0.0, 0.0)}
-            onMouseLeave={() => handleManual(0.0, 0.0)}
-            className="w-14 h-14 bg-slate-800 hover:bg-slate-700 active:bg-sky-600 rounded-xl flex items-center justify-center transition-colors border border-slate-700 cursor-pointer shadow-lg">
-            D
-          </button>
-        </div>
-
-        <button 
-          onClick={handleStop}
-          className="w-full py-3 mt-2 bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/50 text-rose-400 hover:text-rose-300 rounded-xl font-bold tracking-widest transition-all cursor-pointer shadow-[0_0_15px_rgba(225,29,72,0.2)] hover:shadow-[0_0_25px_rgba(225,29,72,0.4)]">
-          EMERGENCY STOP
-        </button>
-      </div>
-    );
   };
 
   return (
@@ -322,16 +324,16 @@ function App() {
         {/* Left Column (Metrics, Nav, Teleop) */}
         <div className="col-span-12 lg:col-span-4 flex flex-col gap-8">
           <CameraFeedPanel />
-          <RobotStatePanel />
-          <NavigationPanel />
-          <ManualTeleopPanel />
+          <RobotStatePanel context={context} taskState={taskState} />
+          <NavigationPanel navHistory={navHistory} />
+          <ManualTeleopPanel handleManual={handleManual} handleStop={handleStop} />
         </div>
 
         {/* Right Column (Reasoning & Console) */}
         <div className="col-span-12 lg:col-span-8 flex flex-col gap-8">
           
           <div className="flex-1 min-h-0">
-            <ReasoningPanel />
+            <ReasoningPanel reasoning={reasoning} />
           </div>
           
           {/* Command Console */}

@@ -7,6 +7,15 @@ from __future__ import annotations
 
 import logging
 import math
+import threading
+import queue
+import cv2
+import numpy as np
+import base64
+import urllib.request
+import json
+import time
+import os
 from typing import Any
 
 from geometry_msgs.msg import Twist
@@ -42,6 +51,12 @@ class ROSExecutor:
         self.memory_store = memory_store
         self.node = node
         self.context_node = context_node
+        self.is_exploring = False
+        self.explore_thread = None
+        self.image_queue = queue.Queue()
+        self.exploration_status = "idle"
+        self.discovery_worker_thread = threading.Thread(target=self._discovery_worker_loop, daemon=True)
+        self.discovery_worker_thread.start()
 
     def execute_plan(self, session_id: str, planner_response: PlannerResponse) -> None:
         """Execute a validated plan step-by-step."""
@@ -74,7 +89,9 @@ class ROSExecutor:
     def _dispatch_action(self, action: str, params: dict[str, Any], memory: Any) -> bool:
         """Route the action to the specific ROS handler."""
         
-        if action == "navigate_to_pose":
+        if action == "explore_environment":
+            return self._execute_explore_environment(memory)
+        elif action == "navigate_to_pose":
             return self._execute_navigate_to_pose(params)
         elif action == "return_home":
             return self._execute_return_home(memory)
@@ -95,16 +112,16 @@ class ROSExecutor:
             logger.warning(f"Unknown action: {action}")
             return False
 
-    def _execute_navigate_to_pose(self, params: dict[str, Any]) -> bool:
+    def _execute_navigate_to_pose(self, params: dict[str, Any], skip_refinement: bool = False) -> bool:
         """Send a goal pose to Nav2."""
         
         x = float(params.get("x", 0.0))
-        y = float(params.get("y", 0.0))
+        y = -float(params.get("y", 0.0)) # Invert Y to map LLM lateral perception to ROS (+Y = Left)
         yaw = float(params.get("yaw", 0.0))
         frame_id = params.get("frame_id", "base_link") # Default to base_link for LLMs
 
         # --- LiDAR Refinement ---
-        if self.context_node and self.context_node.latest_scan_msg:
+        if not skip_refinement and self.context_node and self.context_node.latest_scan_msg:
             try:
                 # 1. Get current robot pose
                 context_dict = self.context_node.store.get_context()
@@ -148,7 +165,8 @@ class ROSExecutor:
                     min_distance = min(valid_ranges)
                     
                     # 5. Refine coordinate (stop 0.5m in front)
-                    stop_distance = max(0.0, min_distance - 0.5)
+                    correction = 0.25
+                    stop_distance = max(0.0, min_distance - correction)
                     x = rx + stop_distance * math.cos(theta_map)
                     y = ry + stop_distance * math.sin(theta_map)
                     frame_id = "map"
@@ -212,6 +230,8 @@ class ROSExecutor:
 
     def _execute_stop_navigation(self) -> bool:
         """Halt the robot immediately via cmd_vel and Nav2 cancellation."""
+        self.is_exploring = False
+        self.exploration_status = "idle"
         
         if self.node.active_goal_handle is not None:
             logger.info("Cancelling active Nav2 goal...")
@@ -229,3 +249,150 @@ class ROSExecutor:
         
         logger.info("Task cancellation requested.")
         return self._execute_stop_navigation()
+
+    def _execute_explore_environment(self, memory: Any) -> bool:
+        if self.is_exploring:
+            logger.info("Already exploring.")
+            return True
+            
+        self.is_exploring = True
+        self.exploration_status = "active"
+        self.explore_thread = threading.Thread(target=self._exploration_loop, args=(memory,), daemon=True)
+        self.explore_thread.start()
+        logger.info("Started continuous frontier exploration.")
+        return True
+
+    def _exploration_loop(self, memory: Any) -> None:
+        last_snapshot_pose = None
+        while self.is_exploring:
+            try:
+                if not self.context_node or not self.context_node.latest_map_msg:
+                    time.sleep(1.0)
+                    continue
+                    
+                context_dict = self.context_node.store.get_context()
+                if "robot_pose" in context_dict and "position" in context_dict["robot_pose"]:
+                    x = context_dict["robot_pose"]["position"]["x"]
+                    y = context_dict["robot_pose"]["position"]["y"]
+                    yaw = context_dict["robot_pose"]["orientation"]["yaw"]
+                    
+                    if last_snapshot_pose is None:
+                        self._queue_snapshot()
+                        last_snapshot_pose = (x, y, yaw)
+                    else:
+                        dx = x - last_snapshot_pose[0]
+                        dy = y - last_snapshot_pose[1]
+                        dyaw = yaw - last_snapshot_pose[2]
+                        while dyaw > math.pi: dyaw -= 2 * math.pi
+                        while dyaw < -math.pi: dyaw += 2 * math.pi
+                        
+                        dist = math.sqrt(dx*dx + dy*dy)
+                        if dist > 1.0 or abs(dyaw) > 0.785: # 1 meter or 45 degrees
+                            self._queue_snapshot()
+                            last_snapshot_pose = (x, y, yaw)
+                            
+                map_msg = self.context_node.latest_map_msg
+                width = map_msg.info.width
+                height = map_msg.info.height
+                res = map_msg.info.resolution
+                ox = map_msg.info.origin.position.x
+                oy = map_msg.info.origin.position.y
+                
+                data = np.array(map_msg.data, dtype=np.int8).reshape((height, width))
+                
+                free_space = np.logical_and(data >= 0, data < 50).astype(np.uint8) * 255
+                unknown_space = (data == -1).astype(np.uint8) * 255
+                
+                kernel = np.ones((3,3), np.uint8)
+                dilated_unknown = cv2.dilate(unknown_space, kernel, iterations=1)
+                frontiers = cv2.bitwise_and(free_space, dilated_unknown)
+                
+                contours, _ = cv2.findContours(frontiers, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if contours:
+                    # Find the longest frontier line
+                    largest_contour = max(contours, key=len)
+                    if len(largest_contour) > 5:
+                        # Pick a point directly ON the frontier line (middle of the contour array)
+                        mid_idx = len(largest_contour) // 2
+                        cx = largest_contour[mid_idx][0][0]
+                        cy = largest_contour[mid_idx][0][1]
+                        
+                        target_x = ox + cx * res
+                        target_y = oy + cy * res
+                        
+                        logger.info(f"[Frontier Explorer] Found new frontier goal at ({target_x:.2f}, {target_y:.2f})")
+                        self._execute_navigate_to_pose({"x": target_x, "y": target_y, "frame_id": "map"}, skip_refinement=True)
+                    else:
+                        logger.info("[Frontier Explorer] Frontiers too small, map might be complete.")
+                        self.exploration_status = "completed"
+                else:
+                    logger.info("[Frontier Explorer] No frontiers found. Map complete!")
+                    self.exploration_status = "completed"
+                    
+            except Exception as e:
+                logger.error(f"[Frontier Explorer] Error: {e}")
+                
+            time.sleep(5.0)
+
+    def _queue_snapshot(self) -> None:
+        image_path = "/home/omkar/RobotProject/backend/app/api/camera_frame.jpg"
+        if os.path.exists(image_path):
+            try:
+                with open(image_path, "rb") as f:
+                    image_data = f.read()
+                    self.image_queue.put(image_data)
+                    logger.info("[Frontier Explorer] Snapshot added to queue.")
+            except Exception as e:
+                logger.error(f"[Frontier Explorer] Error reading snapshot: {e}")
+
+    def _discovery_worker_loop(self) -> None:
+        model_name = os.getenv("OLLAMA_MODEL", "gemma4:e4b")
+        endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434").rstrip("/")
+        url = f"{endpoint}/api/generate"
+        
+        while True:
+            image_data = self.image_queue.get()
+            try:
+                base64_image = base64.b64encode(image_data).decode("utf-8")
+                prompt = (
+                    "Analyze this image and list any distinct objects and their characteristics. "
+                    "Output ONLY a JSON array of objects, e.g. [{\"label\": \"box\", \"characteristics\": \"red, small\"}]. "
+                    "Do NOT output markdown blocks or any other text."
+                )
+                request_body = {
+                    "model": model_name,
+                    "prompt": prompt,
+                    "format": "json",
+                    "stream": False,
+                    "images": [base64_image],
+                    "options": {"temperature": 0.1}
+                }
+                
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(request_body).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                
+                with urllib.request.urlopen(req, timeout=180) as resp:
+                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    response_text = resp_data.get("response", "").strip()
+                    
+                    # Clean markdown code blocks if present
+                    if response_text.startswith("```"):
+                        lines = response_text.splitlines()
+                        if lines[0].startswith("```json") or lines[0].startswith("```"):
+                            lines = lines[1:]
+                        if lines and lines[-1].strip() == "```":
+                            lines = lines[:-1]
+                        response_text = "\\n".join(lines).strip()
+                    
+                    if response_text:
+                        logger.info(f"[Object Discovery] Found new objects: {response_text}")
+                        # In a real app we'd append this to memory store
+                        
+            except Exception as e:
+                logger.error(f"[Object Discovery] Error: {e}")
+            finally:
+                self.image_queue.task_done()

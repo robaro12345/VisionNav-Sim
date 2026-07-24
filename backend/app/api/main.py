@@ -144,9 +144,12 @@ async def get_current_task(session_id: str):
         return {"status": "idle", "active_task": ""}
     
     state = memory.get_context()
+    executor = ros_service.get_executor()
+    exploration_status = executor.exploration_status if hasattr(executor, "exploration_status") else "idle"
     return {
         "active_task": state.active_task,
-        "task_history": [t.model_dump(mode="json") for t in state.task_history[-5:]]
+        "task_history": [t.model_dump(mode="json") for t in state.task_history[-5:]],
+        "exploration_status": exploration_status
     }
 
 

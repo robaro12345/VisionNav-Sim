@@ -1,6 +1,7 @@
 """Constants for allowed robot actions in VisionNav-Sim."""
 
 ALLOWED_ACTIONS = [
+    "explore_environment",
     "navigate_to_object",
     "navigate_to_pose",
     "search_for_object",

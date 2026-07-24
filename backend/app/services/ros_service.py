@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import os
+import json
 from typing import Any
 
 import rclpy
@@ -131,10 +133,29 @@ class ROSService:
 
     def _sync_loop(self) -> None:
         """Background thread target for syncing ContextStore to RobotContextCache at 10Hz."""
+        last_mtime = 0.0
+        cached_semantic_objects = []
+        map_dir = "/home/omkar/Downloads/RobotProject/map"
+        semantic_map_path = os.path.join(map_dir, "semantic_map.json")
+
         while not self._shutdown_event.is_set():
             try:
+                # Load semantic map if it changed
+                if os.path.exists(semantic_map_path):
+                    mtime = os.path.getmtime(semantic_map_path)
+                    if mtime > last_mtime:
+                        try:
+                            with open(semantic_map_path, "r") as f:
+                                data = json.load(f)
+                            cached_semantic_objects = data.get("objects", [])
+                            last_mtime = mtime
+                        except Exception as e:
+                            logger.error(f"Error reading semantic map: {e}")
+                            
                 if self.context_node:
                     ros_context: dict[str, Any] = self.context_node.store.get_context()
+                    ros_context["semantic_objects"] = cached_semantic_objects
+                    
                     # Ensure strict validation through the Pydantic model before caching
                     validated_context = RobotContext.model_validate(ros_context)
                     self.context_cache.update_context(validated_context)
