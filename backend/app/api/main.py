@@ -10,9 +10,8 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 import os
 from geometry_msgs.msg import Twist
 from pydantic import BaseModel, Field
@@ -86,7 +85,9 @@ def process_command(request: CommandRequest, background_tasks: BackgroundTasks):
     
     # 3. Generate plan via Ollama
     try:
-        planner_response = planner.generate_plan(request.command, context, memory.get_context())
+        executor = ros_service.context_node
+        image_data = executor.latest_image_jpeg if executor else None
+        planner_response = planner.generate_plan(request.command, context, memory.get_context(), image_data)
     except Exception as e:
         logger.error(f"Planner failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate plan from LLM.")
@@ -169,7 +170,7 @@ async def get_navigation_history(session_id: str):
 @app.get("/api/camera/frame.jpg")
 async def get_camera_frame():
     """Return the latest camera frame."""
-    file_path = "backend/app/api/camera_frame.jpg"
-    if os.path.exists(file_path):
-        return FileResponse(file_path)
+    executor = ros_service.context_node
+    if executor and getattr(executor, 'latest_image_jpeg', None):
+        return Response(content=executor.latest_image_jpeg, media_type="image/jpeg")
     return {"error": "Camera frame not found"}

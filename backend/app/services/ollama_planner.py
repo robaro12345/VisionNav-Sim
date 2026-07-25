@@ -82,7 +82,8 @@ class OllamaPlanner:
             "You are a high-level robot executive with vision capabilities. Translate the user's natural language command "
             "into a structured action plan. Analyze the current pose, active navigation status, "
             "recent commands, and the provided camera image to generate reasoning and a sequence of steps.\n\n"
-            "You have access to a static semantic map of known objects in the context. If the user asks to go to an object, you MUST use the `navigate_to_object` action and pass the `object_name` parameter.\n\n"
+            "You have access to a static semantic map of known objects in the context. If the user asks to go to an object, you MUST use the `navigate_to_object` action and pass the `object_name` parameter.\n"
+            "IMPORTANT: Compare your current `robot_state.position` to the coordinates of objects in `semantic_objects` to understand your relative position. This helps you distinguish whether an object is currently visible in your camera frame or if it is located elsewhere in the map.\n\n"
             "CONSTRAINTS:\n"
             "- You must ONLY output a valid JSON object matching the JSON schema below.\n"
             "- Do NOT include any markdown code blocks, backticks, or extra explanation outside the JSON.\n"
@@ -168,7 +169,8 @@ class OllamaPlanner:
         self,
         command: str,
         context: RobotContext,
-        memory: ConversationMemory
+        memory: ConversationMemory,
+        image_data: bytes | None = None
     ) -> PlannerResponse:
         """Run the complete planning pipeline by calling local Ollama."""
         context_block = self.build_context(command, context, memory)
@@ -188,13 +190,10 @@ class OllamaPlanner:
         }
 
         # Encode and attach the latest camera frame if available
-        image_path = "/home/omkar/RobotProject/backend/app/api/camera_frame.jpg"
-        if os.path.exists(image_path):
+        if image_data:
             try:
-                with open(image_path, "rb") as f:
-                    image_data = f.read()
-                    base64_image = base64.b64encode(image_data).decode("utf-8")
-                    request_body["images"] = [base64_image]
+                base64_image = base64.b64encode(image_data).decode("utf-8")
+                request_body["images"] = [base64_image]
             except Exception as e:
                 print(f"Error encoding image: {e}")
 

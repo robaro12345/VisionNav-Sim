@@ -16,10 +16,11 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image, LaserScan
 from tf2_msgs.msg import TFMessage
-
-from synapse_bringup.context_store import ContextStore
 import cv2
 from cv_bridge import CvBridge
+from tf2_ros import Buffer, TransformListener
+
+from synapse_bringup.context_store import ContextStore
 
 
 class ContextNode(Node):
@@ -28,9 +29,15 @@ class ContextNode(Node):
     def __init__(self) -> None:
         super().__init__("visionnav_context_node", parameter_overrides=[rclpy.Parameter('use_sim_time', rclpy.Parameter.Type.BOOL, True)])
         self.store = ContextStore()
-        self.bridge = CvBridge()
         self.latest_scan_msg: LaserScan | None = None
         self.latest_map_msg: OccupancyGrid | None = None
+        self.bridge = CvBridge()
+        self.latest_image_jpeg: bytes | None = None
+
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        
+        self.pose_timer = self.create_timer(0.1, self._update_pose_from_tf)
 
         # Existing odom topic from the Gazebo DiffDrive plugin.
         self._odom_subscription = self.create_subscription(
@@ -73,33 +80,53 @@ class ContextNode(Node):
         )
 
     def _handle_odom(self, message: Odometry) -> None:
-        """Store the latest robot pose and velocity from /odom."""
-
-        pose = message.pose.pose
+        """Store the latest robot velocity from /odom."""
         twist = message.twist.twist
         speed = sqrt(twist.linear.x**2 + twist.linear.y**2 + twist.linear.z**2)
-        self.store.update_pose(
-            {
-                "position": {
-                    "x": pose.position.x,
-                    "y": pose.position.y,
-                    "z": pose.position.z,
-                    "frame_id": message.header.frame_id or "odom",
-                },
-                "orientation": {
-                    "roll": 0.0,
-                    "pitch": 0.0,
-                    "yaw": atan2(
-                        2.0 * (pose.orientation.w * pose.orientation.z + pose.orientation.x * pose.orientation.y),
-                        1.0 - 2.0 * (pose.orientation.y**2 + pose.orientation.z**2),
-                    ),
-                },
-                "battery": self.store.get_context().get("battery", 0.0),
-                "is_moving": speed > 0.01,
-                "velocity_linear": speed,
-                "velocity_angular": twist.angular.z,
-            }
-        )
+        
+        # Only update velocities, position is handled by TF map->base_link
+        current_pose = self.store.get_context().get("robot_pose", {})
+        if current_pose:
+            current_pose["is_moving"] = speed > 0.01
+            current_pose["velocity_linear"] = speed
+            current_pose["velocity_angular"] = twist.angular.z
+            self.store.update_pose(current_pose)
+
+    def _update_pose_from_tf(self) -> None:
+        """Continuously update robot pose in the map frame."""
+        try:
+            now = rclpy.time.Time()
+            trans = self.tf_buffer.lookup_transform("map", "base_link", now)
+            
+            x = trans.transform.translation.x
+            y = trans.transform.translation.y
+            z = trans.transform.translation.z
+            
+            q = trans.transform.rotation
+            yaw = atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y**2 + q.z**2))
+            
+            current_pose = self.store.get_context().get("robot_pose", {})
+            self.store.update_pose(
+                {
+                    "position": {
+                        "x": x,
+                        "y": y,
+                        "z": z,
+                        "frame_id": "map",
+                    },
+                    "orientation": {
+                        "roll": 0.0,
+                        "pitch": 0.0,
+                        "yaw": yaw,
+                    },
+                    "battery": self.store.get_context().get("battery", 100.0),
+                    "is_moving": current_pose.get("is_moving", False),
+                    "velocity_linear": current_pose.get("velocity_linear", 0.0),
+                    "velocity_angular": current_pose.get("velocity_angular", 0.0),
+                }
+            )
+        except Exception:
+            pass
 
     def _handle_tf(self, message: TFMessage) -> None:
         """Store a lightweight note that TF data is actively arriving."""
@@ -134,17 +161,13 @@ class ContextNode(Node):
         self.store.update_scene_summary(
             f"camera frame={message.width}x{message.height} encoding={message.encoding}"
         )
-        
         try:
             cv_image = self.bridge.imgmsg_to_cv2(message, desired_encoding='bgr8')
-            # Use atomic write to prevent frontend from reading partial file
-            final_path = "/home/omkar/Downloads/RobotProject/backend/app/api/camera_frame.jpg"
-            temp_path = "/home/omkar/Downloads/RobotProject/backend/app/api/camera_frame_tmp.jpg"
-            import os
-            cv2.imwrite(temp_path, cv_image)
-            os.replace(temp_path, final_path)
+            success, buffer = cv2.imencode('.jpg', cv_image)
+            if success:
+                self.latest_image_jpeg = buffer.tobytes()
         except Exception as e:
-            self.get_logger().error(f"Error saving camera frame: {e}")
+            self.get_logger().error(f"Error converting image: {e}")
 
     def _handle_map(self, message: OccupancyGrid) -> None:
         """Track map progress from the already published /map occupancy grid."""
