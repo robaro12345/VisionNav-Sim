@@ -63,7 +63,7 @@ Nav2 (Navigation & Obstacle Avoidance)
 
 - **Natural Language Control:** Type goals to the robot; the local Ollama-powered planner interprets and dispatches them.
 - **Local AI Planning:** Zero external API calls — entirely powered by `gemma4:12b` via Ollama.
-- **Autonomous Exploration:** `explore_environment` triggers a frontier exploration pipeline (`fronter_exploration` ROS package) followed by `semantic_mapper` to build a `semantic_map.json`.
+- **Autonomous Exploration:** `explore_environment` triggers a frontier exploration pipeline ([`fronter_exploration`](https://github.com/your-username/frontier_exploration) ROS package) followed by [`semantic_mapper`](https://github.com/your-username/semantic_mapper) to build a `semantic_map.json`.
 - **Semantic Map Integration:** The backend hot-reloads `semantic_map.json` at 10 Hz and injects known objects into every planner context call — enabling "go to the box"-style commands.
 - **Session Memory:** Per-session history tracks recent commands, task lifecycle (start → complete/cancel), and navigation records across the conversation.
 - **Live Dashboard:** Glassmorphic Vite/React/TypeScript cockpit with live camera feed, robot state polling, and AI reasoning display.
@@ -101,7 +101,7 @@ Nav2 (Navigation & Obstacle Avoidance)
 ## 🛠️ Tech Stack
 
 - **Robot & Sim:** TurtleBot3 Waffle · Gazebo Harmonic · ROS 2 Jazzy (Ubuntu 24.04 / WSL2)
-- **Navigation & Exploration:** Nav2 · SLAM Toolbox · `fronter_exploration` · `semantic_mapper`
+- **Navigation & Exploration:** Nav2 · SLAM Toolbox · [`fronter_exploration`](https://github.com/your-username/frontier_exploration) · [`semantic_mapper`](https://github.com/your-username/semantic_mapper)
 - **AI:** Ollama (local-only) · `gemma4:12b`
 - **Camera:** OpenCV + `cv_bridge` (JPEG encoding from `/camera/image_raw`)
 - **Backend:** FastAPI · Python threading · Pydantic v2 · PyYAML
@@ -146,6 +146,7 @@ RobotProject/
 │               └── context_store.py  # Thread-safe sensor snapshot store
 ├── config/
 │   └── paths.yaml                    # Map directory path config
+├── img/                              # Project screenshots
 ├── map/
 │   ├── map.pgm                       # Saved occupancy grid image
 │   ├── map.yaml                      # Map metadata
@@ -159,7 +160,7 @@ RobotProject/
 
 - LLM inference is **local-only** — no external API calls are made.
 - Nav2 exclusively handles obstacle avoidance and path planning; the LLM handles high-level intent only.
-- **`navigate_to_object` is stubbed** — the action is in the planner whitelist but the executor returns `False` (V1 limitation). Semantic objects from `semantic_map.json` are injected into the planner context to enable object-aware reasoning, but autonomous pose lookup is not yet implemented.
+- **Semantic Object Navigation:** `navigate_to_object` uses `semantic_map.json` to look up known object centroids, compute safe standoff approach waypoints, and dispatch them to Nav2.
 - The `ContextNode` records a scene summary from raw LiDAR and camera metadata only — no object detection runs on the robot.
 - This repository covers the **simulation track only**; the physical robot track is not started.
 
@@ -186,7 +187,7 @@ source install/setup.bash
 ros2 launch synapse_bringup sim_launch.py
 ```
 
-> **Note:** `fronter_exploration` and `semantic_mapper` packages must also be built in your workspace for the `explore_environment` action to work. The map is auto-detected from `config/paths.yaml` — if a saved map exists, Nav2 starts in localization mode instead of SLAM.
+> **Note:** [`fronter_exploration`](https://github.com/robaro12345/Frontier_Exploration) and [`semantic_mapper`](https://github.com/robaro12345/Semantic_Mapper) packages must also be built in your workspace for the `explore_environment` action to work. The map is auto-detected from `config/paths.yaml` — if a saved map exists, Nav2 starts in AMCL localization mode with auto-seeded initial pose.
 
 ### 3. Start the Backend API
 
@@ -211,6 +212,6 @@ Open `http://localhost:5173` and command your robot using natural language.
 
 ## Demo
 
-Will Make One some time later...
+![VisionNav Sim Dashboard](img/Screenshot_20260824_205639.png)
 
 ---

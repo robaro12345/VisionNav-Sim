@@ -18,6 +18,7 @@ venv/
 .venv/
 env/
 ENV/
+*.png
 
 # Environment files
 .env

@@ -65,7 +65,7 @@ class ROSExecutor:
         
         for step in planner_response.plan:
             logger.info(f"Executing step {step.step}: {step.action}")
-            success = self._dispatch_action(step.action, step.parameters, memory)
+            success = self._dispatch_action(step.action, step.parameters, memory, goal=planner_response.goal)
             
             memory.record_navigation({
                 "target": step.action,
@@ -80,7 +80,7 @@ class ROSExecutor:
         logger.info("Plan execution completed successfully.")
         memory.complete_task(planner_response.goal)
 
-    def _dispatch_action(self, action: str, params: dict[str, Any], memory: Any) -> bool:
+    def _dispatch_action(self, action: str, params: dict[str, Any], memory: Any, goal: str = "") -> bool:
         """Route the action to the specific ROS handler."""
         
         if action == "explore_environment":
@@ -94,8 +94,7 @@ class ROSExecutor:
         elif action == "cancel_task":
             return self._execute_cancel_task(memory)
         elif action == "navigate_to_object":
-            logger.warning("navigate_to_object failed: Object localization is not yet available in v1.")
-            return False
+            return self._execute_navigate_to_object(params, memory, goal=goal)
         elif action in ["describe_scene", "count_objects", "report_status"]:
             logger.info(f"Action '{action}' is handled independently by the API layer or context store.")
             return True
@@ -106,13 +105,153 @@ class ROSExecutor:
             logger.warning(f"Unknown action: {action}")
             return False
 
+    def _get_map_metadata(self) -> tuple[float, float, float]:
+        """Returns (origin_x, origin_y, resolution) from map.yaml or defaults."""
+        map_dir = "/home/omkar/Downloads/RobotProject/map"
+        map_yaml_path = os.path.join(map_dir, "map.yaml")
+        origin_x, origin_y, resolution = -7.948, -9.508, 0.05
+        if os.path.exists(map_yaml_path):
+            try:
+                with open(map_yaml_path, "r") as f:
+                    data = yaml.safe_load(f)
+                origin = data.get("origin", [origin_x, origin_y, 0])
+                origin_x = float(origin[0])
+                origin_y = float(origin[1])
+                resolution = float(data.get("resolution", resolution))
+            except Exception as e:
+                logger.warning(f"Error loading map.yaml metadata: {e}")
+        return origin_x, origin_y, resolution
+
+    def _get_semantic_objects(self) -> list[dict[str, Any]]:
+        """Returns list of semantic objects from context node or semantic_map.json."""
+        if self.context_node:
+            context_dict = self.context_node.store.get_context()
+            if "semantic_objects" in context_dict and context_dict["semantic_objects"]:
+                return context_dict["semantic_objects"]
+
+        map_dir = "/home/omkar/Downloads/RobotProject/map"
+        semantic_map_path = os.path.join(map_dir, "semantic_map.json")
+        if os.path.exists(semantic_map_path):
+            try:
+                with open(semantic_map_path, "r") as f:
+                    data = json.load(f)
+                return data.get("objects", [])
+            except Exception as e:
+                logger.warning(f"Error loading semantic_map.json: {e}")
+        return []
+
+    def _execute_navigate_to_object(self, params: dict[str, Any], memory: Any, goal: str = "") -> bool:
+        """Find the target object in the semantic map and navigate to it."""
+        import re
+        target = params.get("object_name") or params.get("label") or ""
+        
+        # Combine target label and overall goal text (e.g. "cube" + "Navigate to the pink cube.")
+        full_query = f"{target} {goal}".lower()
+        cleaned_query = re.sub(r"[^a-zA-Z0-9\s]", " ", full_query)
+        stopwords = {"to", "the", "a", "an", "at", "in", "on", "navigate", "go", "move", "drive", "reach", "find", "object", "please"}
+        tokens = [t for t in cleaned_query.split() if t and t not in stopwords]
+
+        objects = self._get_semantic_objects()
+        if not objects:
+            logger.warning(f"No semantic objects available to locate '{target}'.")
+            return False
+
+        best_match = None
+        best_score = -1.0
+
+        for obj in objects:
+            name = str(obj.get("name", "")).lower()
+            desc = str(obj.get("description", "")).lower()
+            
+            score = 0.0
+            target_lower = target.lower().strip()
+            
+            # Base name match
+            if target_lower and target_lower == name:
+                score += 5.0
+            elif target_lower and target_lower in name:
+                score += 3.0
+
+            # Match modifier tokens (colors, descriptions e.g. "pink", "yellow", "cube")
+            for token in tokens:
+                if token == name or token in name:
+                    score += 4.0
+                if token in desc:
+                    score += 5.0 # High weight for color and descriptive keywords
+
+            # Exact phrase match in description
+            if target_lower and len(target_lower) > 3 and target_lower in desc:
+                score += 6.0
+
+            if score > best_score and score > 0:
+                best_score = score
+                best_match = obj
+
+        if not best_match:
+            logger.warning(f"Could not find any semantic object matching '{target}' (goal: '{goal}').")
+            return False
+
+        obj_name = best_match.get("name", "object")
+        centroid = best_match.get("centroid")
+        if not centroid or len(centroid) < 2:
+            logger.error(f"Matched object '{obj_name}' has invalid centroid: {centroid}")
+            return False
+
+        # Centroid is stored as [row, col] in grid coordinates
+        row, col = float(centroid[0]), float(centroid[1])
+        origin_x, origin_y, resolution = self._get_map_metadata()
+        
+        # Convert grid (row, col) to map frame (x, y)
+        world_x = origin_x + (col + 0.5) * resolution
+        world_y = origin_y + (row + 0.5) * resolution
+
+        logger.info(
+            f"Found target '{target}' -> '{obj_name}' (ID: {best_match.get('id')}) at map coords ({world_x:.2f}, {world_y:.2f})"
+        )
+
+        # Get current robot pose
+        rx, ry, ryaw = 0.0, 0.0, 0.0
+        if self.context_node:
+            context_dict = self.context_node.store.get_context()
+            if "robot_pose" in context_dict and "position" in context_dict["robot_pose"]:
+                rx = context_dict["robot_pose"]["position"]["x"]
+                ry = context_dict["robot_pose"]["position"]["y"]
+                ryaw = context_dict["robot_pose"]["orientation"]["yaw"]
+
+        # Calculate approach waypoint at a safe standoff distance (1.0m)
+        standoff = 1.0
+        dx = world_x - rx
+        dy = world_y - ry
+        dist = math.hypot(dx, dy)
+
+        if dist > standoff:
+            ux = dx / dist
+            uy = dy / dist
+            goal_x = world_x - standoff * ux
+            goal_y = world_y - standoff * uy
+        else:
+            goal_x = rx
+            goal_y = ry
+
+        goal_yaw = math.atan2(dy, dx)
+
+        nav_params = {
+            "x": goal_x,
+            "y": goal_y,
+            "yaw": goal_yaw,
+            "frame_id": "map"
+        }
+
+        logger.info(f"Navigating to object '{obj_name}' waypoint: x={goal_x:.2f}, y={goal_y:.2f}, yaw={goal_yaw:.2f}")
+        return self._execute_navigate_to_pose(nav_params)
+
     def _execute_navigate_to_pose(self, params: dict[str, Any], skip_refinement: bool = False) -> bool:
         """Send a goal pose to Nav2."""
         
-        x = float(params.get("x", 0.0))
-        y = -float(params.get("y", 0.0)) # Invert Y to map LLM lateral perception to ROS (+Y = Left)
-        yaw = float(params.get("yaw", 0.0))
         frame_id = params.get("frame_id", "base_link") # Default to base_link for LLMs
+        x = float(params.get("x", 0.0))
+        y = float(params.get("y", 0.0))
+        yaw = float(params.get("yaw", 0.0))
 
         rx, ry, ryaw = 0.0, 0.0, 0.0
         if self.context_node:
@@ -124,6 +263,8 @@ class ROSExecutor:
 
         # 1. Transform to map frame if needed
         if frame_id == "base_link":
+            # Invert Y to map LLM lateral perception (+Y = right) to ROS (+Y = left)
+            y = -y
             x_map = rx + x * math.cos(ryaw) - y * math.sin(ryaw)
             y_map = ry + x * math.sin(ryaw) + y * math.cos(ryaw)
             yaw_map = ryaw + yaw

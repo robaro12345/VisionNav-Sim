@@ -80,12 +80,13 @@ class SafetyLayer:
                     )
 
             elif action in ("navigate_to_object", "search_for_object", "inspect_object", "count_objects"):
-                # Must specify a label to target
-                if "label" not in params:
-                    return False, f"Action '{action}' in step {step.step} is missing parameter 'label'."
-                label = params["label"]
+                # Must specify a label or object_name to target
+                target_key = "label" if "label" in params else ("object_name" if "object_name" in params else None)
+                if not target_key:
+                    return False, f"Action '{action}' in step {step.step} is missing parameter 'label' or 'object_name'."
+                label = params[target_key]
                 if not isinstance(label, str) or not label.strip():
-                    return False, f"Parameter 'label' in step {step.step} must be a non-empty string."
+                    return False, f"Parameter '{target_key}' in step {step.step} must be a non-empty string."
 
         return True, ""
 
